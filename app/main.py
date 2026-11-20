@@ -73,5 +73,4 @@ def create_app(model_path=None, metrics_path=None):
 
     return api
 
-
 app = create_app()
