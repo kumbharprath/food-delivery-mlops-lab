@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+mlruns
+mlartifacts
+tests
+docs
+aws
+scripts
+data
+*.md

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+mlruns/
+mlartifacts/
+artifacts/*
+!artifacts/.gitkeep
+.env
+aws/*.generated.json
+aws/*-generated.json
+aws/*-policy.generated.json

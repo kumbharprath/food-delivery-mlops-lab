@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow", "Action": ["ecr:GetAuthorizationToken"], "Resource": "*"},
+    {"Effect": "Allow", "Action": ["ecr:BatchCheckLayerAvailability", "ecr:CompleteLayerUpload", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart", "ecr:BatchGetImage"], "Resource": "arn:aws:ecr:ap-south-1:<ACCOUNT_ID>:repository/food-delivery-api"},
+    {"Effect": "Allow", "Action": ["s3:PutObject"], "Resource": "arn:aws:s3:::<S3_BUCKET>/models/*"},
+    {"Effect": "Allow", "Action": ["ssm:SendCommand"], "Resource": ["arn:aws:ssm:ap-south-1::document/AWS-RunShellScript", "arn:aws:ec2:ap-south-1:<ACCOUNT_ID>:instance/<EC2_INSTANCE_ID>"]},
+    {"Effect": "Allow", "Action": ["ssm:GetCommandInvocation"], "Resource": "*"}
+  ]
+}

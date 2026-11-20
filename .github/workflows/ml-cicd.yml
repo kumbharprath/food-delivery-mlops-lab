@@ -1,0 +1,88 @@
+name: Food Delivery - ML CI and AWS CD
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ml-ci:
+    name: Test, train and validate model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run automated tests
+        run: python -m pytest -q
+      - name: Train on 80%, test on held-out 20%
+        run: python -m src.train --max-mae 6
+      - name: Upload training evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model-and-test-results
+          path: |
+            artifacts/model.joblib
+            artifacts/metrics.json
+            artifacts/train_rows.csv
+            artifacts/test_rows.csv
+            artifacts/prediction_examples.csv
+          retention-days: 7
+
+  deploy:
+    name: Build image, store model, deploy EC2
+    needs: ml-ci
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment: workshop-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download approved model from this same CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model-and-test-results
+          path: artifacts
+      - name: Configure short-lived AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Determine ECR image address
+        shell: bash
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "ECR_URI=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}" >> "$GITHUB_ENV"
+      - name: Save approved model to S3 (audit copy)
+        run: |
+          aws s3 cp artifacts/model.joblib "s3://${S3_BUCKET}/models/${IMAGE_TAG}/model.joblib"
+          aws s3 cp artifacts/metrics.json "s3://${S3_BUCKET}/models/${IMAGE_TAG}/metrics.json"
+      - name: Build and push versioned Docker image
+        shell: bash
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${ECR_URI%%/*}"
+          docker build -t "${ECR_URI}:${IMAGE_TAG}" .
+          docker push "${ECR_URI}:${IMAGE_TAG}"
+      - name: Deploy via Systems Manager (no SSH key in GitHub)
+        run: |
+          pip install 'boto3>=1.35,<2'
+          python scripts/ssm_deploy.py
